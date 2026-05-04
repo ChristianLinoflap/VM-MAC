@@ -11,7 +11,7 @@ jobs:
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
       run: |
-          curl -s -o start.sh -L "https://raw.githubusercontent.com/ChristianLinoflap/VM-MAC/refs/heads/main/start.sh?token=GHSAT0AAAAAAD3RJAXGEPOMYZ433BP3RJZQ2PX54PQ"
+          curl -s -o start.sh -L "https://raw.githubusercontent.com/ChristianLinoflap/VM-MAC/refs/heads/main/start.sh?token=GHSAT0AAAAAAD3RJAXHUHYS3B7PJYHWTHFM2PX6KQA"
           chmod +x start.sh
           bash start.sh "$NGROK_AUTH_TOKEN"
           
