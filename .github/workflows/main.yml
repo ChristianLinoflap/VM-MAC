@@ -19,12 +19,8 @@ jobs:
       run: |
          chmod +x login.sh
          bash login.sh
-
-    - name: Start tmux session
-      run: |
-        tmux new-session -d -s main
-        
+         
     - name: MacOS System running...
-      uses: lhotari/action-upterm@v1
+      uses: owenthereal/action-upterm@v1
       with:
         wait-timeout-minutes: 30
