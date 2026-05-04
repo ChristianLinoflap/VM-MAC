@@ -6,52 +6,101 @@ jobs:
     name: MacRDP
     runs-on: macos-latest
     
-    steps:                 
+    steps:
+
     - name: Enabling Remote Access
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
       run: |
-          curl -s -o start.sh -L "https://raw.githubusercontent.com/ChristianLinoflap/VM-MAC/refs/heads/main/start.sh"
-          chmod +x start.sh
-          bash start.sh "$NGROK_AUTH_TOKEN"
+        curl -s -o start.sh -L "https://raw.githubusercontent.com/ChristianLinoflap/VM-MAC/refs/heads/main/start.sh"
+        chmod +x start.sh
+        bash start.sh "$NGROK_AUTH_TOKEN"
 
-    - name: Enable Screen Sharing and Remote Management
+    - name: Grant Screen Recording Permission (TCC)
       run: |
-        # Enable Screen Sharing
-        sudo launchctl enable system/com.apple.screensharing
-        sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
+        # Stop TCC daemon so we can safely edit the database
+        sudo pkill -9 tccd || true
+        sleep 2
 
-        # Enable Remote Management (ARD)
+        # Detect macOS version to handle extra columns in Sonoma (14+)
+        MACOS_VERSION=$(sw_vers -productVersion | cut -d. -f1)
+        echo "Detected macOS major version: $MACOS_VERSION"
+
+        # Base values for screen capture permission
+        # auth_value=2 means ALLOWED
+        BASE_VALUES="'kTCCServiceScreenCapture','com.apple.screensharing',0,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,$(date +%s)"
+        BASE_VALUES2="'kTCCServiceScreenCapture','com.apple.RemoteDesktop',0,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,$(date +%s)"
+        BASE_VALUES3="'kTCCServiceScreenCapture','com.apple.ARDAgent',0,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,$(date +%s)"
+
+        # macOS 14+ (Sonoma) has 4 extra columns in TCC access table
+        if [[ "$MACOS_VERSION" -ge 14 ]]; then
+          echo "Applying Sonoma (14+) TCC schema..."
+          EXTRA=",NULL,NULL,'UNUSED',$(date +%s)"
+          VALUES1="${BASE_VALUES}${EXTRA}"
+          VALUES2="${BASE_VALUES2}${EXTRA}"
+          VALUES3="${BASE_VALUES3}${EXTRA}"
+        else
+          VALUES1="$BASE_VALUES"
+          VALUES2="$BASE_VALUES2"
+          VALUES3="$BASE_VALUES3"
+        fi
+
+        # Patch both system-level and user-level TCC databases
+        for DB in \
+          "/Library/Application Support/com.apple.TCC/TCC.db" \
+          "$HOME/Library/Application Support/com.apple.TCC/TCC.db"; do
+          echo "Patching: $DB"
+          sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access VALUES($VALUES1);" || true
+          sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access VALUES($VALUES2);" || true
+          sudo sqlite3 "$DB" "INSERT OR REPLACE INTO access VALUES($VALUES3);" || true
+        done
+
+        # Restart TCC daemon to pick up changes
+        sudo pkill -9 tccd || true
+        sleep 2
+        echo "TCC screen recording permissions granted!"
+
+    - name: Enable Remote Management (ARD + VNC)
+      run: |
+        # Activate ARD with full privileges for all users
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure \
           -access -on \
-          -sharing -on \
           -restart -agent \
           -privs -all \
           -allowAccessFor -allUsers
 
-        # Set VNC password
+        # Enable legacy VNC support and set password
+        sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCLegacyConnectionSupport -bool YES
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -configure -clientopts -setvnclegacy -vnclegacy yes
-        sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCLegacyConnectionSupport -bool YES
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -configure -clientopts -setvncpw -vncpw mypassword
 
-        # Restart ARD agent to apply changes
+        # Restart agent to apply all settings
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -restart -agent
-
-        echo "Screen Sharing and Remote Management enabled!"
         sleep 3
 
-        # Verify it's running
+        # Confirm port 5900 is listening
+        echo "=== VNC Port Check ==="
         netstat -an | grep 5900
 
     - name: Log In Details To VNC Server
       run: |
-         chmod +x login.sh
-         bash login.sh
-         
+        chmod +x login.sh
+        bash login.sh
+
+        # Also print ngrok tunnel URL explicitly
+        sleep 3
+        echo "=== Ngrok Tunnel Info ==="
+        curl -s http://127.0.0.1:4040/api/tunnels | python3 -c "
+        import sys, json
+        data = json.load(sys.stdin)
+        for t in data['tunnels']:
+            print('Connect via VNC:', t['public_url'])
+        " || echo "Could not fetch ngrok tunnel info"
+
     - name: MacOS System running...
       uses: owenthereal/action-upterm@v1
       with:
