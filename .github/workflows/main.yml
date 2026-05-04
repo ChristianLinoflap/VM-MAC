@@ -14,7 +14,39 @@ jobs:
           curl -s -o start.sh -L "https://raw.githubusercontent.com/ChristianLinoflap/VM-MAC/refs/heads/main/start.sh"
           chmod +x start.sh
           bash start.sh "$NGROK_AUTH_TOKEN"
-          
+
+    - name: Enable Screen Sharing and Remote Management
+      run: |
+        # Enable Screen Sharing
+        sudo launchctl enable system/com.apple.screensharing
+        sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
+
+        # Enable Remote Management (ARD)
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+          -activate -configure \
+          -access -on \
+          -sharing -on \
+          -restart -agent \
+          -privs -all \
+          -allowAccessFor -allUsers
+
+        # Set VNC password
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+          -configure -clientopts -setvnclegacy -vnclegacy yes
+        sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCLegacyConnectionSupport -bool YES
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+          -configure -clientopts -setvncpw -vncpw mypassword
+
+        # Restart ARD agent to apply changes
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+          -restart -agent
+
+        echo "Screen Sharing and Remote Management enabled!"
+        sleep 3
+
+        # Verify it's running
+        netstat -an | grep 5900
+
     - name: Log In Details To VNC Server
       run: |
          chmod +x login.sh
