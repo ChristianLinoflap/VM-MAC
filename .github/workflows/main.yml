@@ -23,7 +23,5 @@ jobs:
     - name: MacOS System running...
       uses: lhotari/action-upterm@v1
       with:
-        ## Only your GitHub account can SSH in (recommended)
-        limit-access-to-actor: true
         ## Auto-shutdown if nobody connects within 5 minutes
         wait-timeout-minutes: 5
