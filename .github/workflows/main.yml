@@ -19,9 +19,12 @@ jobs:
       run: |
          chmod +x login.sh
          bash login.sh
-         
+
+    - name: Start tmux session
+      run: |
+        tmux new-session -d -s main
+        
     - name: MacOS System running...
       uses: lhotari/action-upterm@v1
       with:
-        ## Auto-shutdown if nobody connects within 5 minutes
-        wait-timeout-minutes: 5
+        wait-timeout-minutes: 30
